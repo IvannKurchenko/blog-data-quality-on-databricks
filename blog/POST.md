@@ -177,7 +177,7 @@ from pyspark.sql import types as T
 
 w = WorkspaceClient()
 
-catalog_name = "personal"
+catalog_name = "catalog"
 schema_name = "airline_raw"
 table_name = "on_time_on_time_performance_2016_1"
 full_table_name = f"{catalog_name}.{schema_name}.{table_name}"
@@ -230,7 +230,7 @@ from databricks.sdk.service.dataquality import Refresh
 
 w = WorkspaceClient()
 
-catalog_name = "personal"
+catalog_name = "catalog"
 schema_name = "airline_raw"
 table_name = "on_time_on_time_performance_2016_1"
 
@@ -255,7 +255,7 @@ For instance, we can query `outdated` custom metric value from the latest profil
 ```sql
 %sql
 select window.start, window.end, outdated
-from personal.airline_raw_quality.on_time_on_time_performance_2016_1_profile_metrics
+from catalog.airline_raw_quality.on_time_on_time_performance_2016_1_profile_metrics
 where column_name = 'FlightDate'
 order by window.end desc
 limit 1
@@ -289,7 +289,7 @@ warehouse_id = warehouses[0].id
 # Query latest `outdated` metric value
 query_text = """
 select outdated
-from personal.airline_raw_quality.on_time_on_time_performance_2016_1_profile_metrics
+from catalog.airline_raw_quality.on_time_on_time_performance_2016_1_profile_metrics
 where column_name = 'FlightDate'
 order by window.end desc
 limit 1
@@ -306,7 +306,7 @@ evaluation = AlertV2Evaluation(
     notification=AlertV2Notification(
         notify_on_ok=True,
         subscriptions=[
-            AlertV2Subscription(user_email="ivankoorchenko@gmail.com")
+            AlertV2Subscription(user_email="username@email.com") # example email
         ],
     )
 )
@@ -333,7 +333,7 @@ from original dataset, but replaced `FlightDate` column with the 1st of January 
 ```python
 from pyspark.sql import functions as F
 
-full_table_name = f"personal.airline_raw.on_time_on_time_performance_2016_1"
+full_table_name = f"catalog.airline_raw.on_time_on_time_performance_2016_1"
 
 (
     spark
