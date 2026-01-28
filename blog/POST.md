@@ -1,37 +1,25 @@
-## Data quality on Databricks
+## Data Quality on Databricks
 
 ### Introduction
-In this blog post, we will reveal a topic of Data Quality from both theoretical and practical implementation using the Databricks platform.
-The primary focus would on end to end implementation to showcase platform capabilities, that will include profiling, monitoring and alerting.
-
-### Definition of Data Quality
-The definition of Data Quality given in many resources, can be summarised measurement of how well the data represents real-world facts.
-This is usually done though the number of checks or measurements in different dimensions such as:
-- _Accuracy_ — whether data comply syntactic and semantic rules.
-- _Completeness_ - whether expected data is present in full form.
-- _Consistency_ — whether components of data set are coherent between each other.
-- _Credibility_ - whether data can be trusted and reflects correctly state of real world.
-- _Currentnes_ - whether data is fresh enough and reflect recent state of real world.
-- _Timeliness_ - whether data is updated within the expected time range
-- _Reasonableness_ - whether high-level value patterns are close to expectations
-- _Uniqueness_ - whether duplicates are present
-
-We won't cover all the implementation for each dimension, but rather focus on one example to showcase building complete data quality monitoring.
+In this blog post, we explore the data quality monitoring tools available on the Databricks platform.
+The primary focus is an end-to-end implementation that showcases platform capabilities, including profiling, monitoring, and alerting.
 
 ### Data Quality in Databricks
-Databricks provides two main capabilities for the Data Quality monitoring:
-- **Anomaly detection** - this is a monitoring for all tables in a schema based on learned historical patterns alert on un-usual events.
-  In particular, this covers data freshness (how long ago the table was updated) and completeness (proportion of missing data).
-- **Data profiling** - this is a mechanism for calculating a number of table metrics which then can be used to create alerts based on. 
-  This is more controlled and gradual mechanism for data quality monitoring.  
+Databricks provides two main capabilities for data quality monitoring:
+- **Anomaly detection** – monitoring for all tables in a schema based on learned historical patterns, with alerts triggered on unusual events.
+  In particular, this covers data freshness (how long ago a table was updated) and completeness (the proportion of missing data).
+- **Data profiling** – a mechanism for calculating a set of table-level metrics, which can then be used to define alerting rules.
+  This is a more controlled and incremental approach to data quality monitoring.
 
-We will explore both of these features on a one example.
+We will explore both of these features using the same example.
 
-### Setup a data
-To showcase the platform capabilities we will use [Airline](https://relational.fel.cvut.cz/dataset/Airline) data-set from "CTU Relational Learning Repository" repository.
-This data set represents flight data in the US for 2016, consisting of the main `On_Time_On_Time_Performance_2016_1` table and several dimensions.
-It's a bit messy so should perfectly fit for this purpose.
-First lets upload a single table `On_Time_On_Time_Performance_2016_1` with flights into target Unity Catalog
+### Set up the data
+To showcase the platform capabilities, we will use the [Airline](https://relational.fel.cvut.cz/dataset/Airline) dataset from the CTU Relational Learning Repository.
+This dataset contains US flight data for 2016 and consists of the main `On_Time_On_Time_Performance_2016_1` table along with several dimension tables.
+
+It’s a bit messy, which makes it a perfect fit for this purpose.
+
+First, let’s upload the `On_Time_On_Time_Performance_2016_1` table (flights) into the target Unity Catalog:
 ```python
 from pyspark.sql import SparkSession, DataFrame
 
@@ -40,8 +28,8 @@ JDBC_USER = "guest"
 JDBC_PASSWORD = "ctu-relational"
 JDBC_DRIVER = "org.mariadb.jdbc.Driver"
 
-# Catalog and schema names are just examples, make sure to substitue correct values
-UC_CATALOG = "catalog"  
+# Catalog and schema names are just examples; make sure to substitute the correct values
+UC_CATALOG = "catalog"
 UC_SCHEMA = "schema"
 
 spark.sql(f"CREATE CATALOG IF NOT EXISTS {UC_CATALOG}")
@@ -51,27 +39,26 @@ table = "On_Time_On_Time_Performance_2016_1"
 full_target = f"{UC_CATALOG}.{UC_SCHEMA}.{table}"
 
 (
-        spark
-        .read
-        .format("jdbc")
-        .option("url", JDBC_URL)
-        .option("dbtable", table)
-        .option("user", JDBC_USER)
-        .option("password", JDBC_PASSWORD)
-        .option("driver", JDBC_DRIVER)
-        .load()
-        .write
-        .mode("overwrite")
-        .option("overwriteSchema", "true")
-        .saveAsTable(full_target)
+    spark.read.format("jdbc")
+    .option("url", JDBC_URL)
+    .option("dbtable", table)
+    .option("user", JDBC_USER)
+    .option("password", JDBC_PASSWORD)
+    .option("driver", JDBC_DRIVER)
+    .load()
+    .write
+    .mode("overwrite")
+    .option("overwriteSchema", "true")
+    .saveAsTable(full_target)
 )
 ```
-To give a general sense of data lets output a small portion of it:
+To get a general sense of the data, let’s print a small sample:
 ```python
-print(f"Flights table: columns count: {len(spark.table(full_target).columns)}; rows count: {spark.table(full_target).count()}")
-spark.table(full_target).select(spark.table(full_target).columns[0:10]).show(10)
+df = spark.table(full_target)
+print(f"Flights table: columns count: {len(df.columns)}; rows count: {df.count()}")
+df.select(df.columns[0:10]).show(10)
 ```
-That produces the following result:
+That produces the following output:
 ```text
 Flights table: columns count: 83; rows count: 445827
 +----+-------+-----+----------+---------+----------+-------------+---------+-------+-------+
@@ -85,19 +72,16 @@ Flights table: columns count: 83; rows count: 445827
 |2016|      1|    1|        11|        1|2016-01-11|           AA|    19805|     AA| N468AA|
 |2016|      1|    1|        12|        2|2016-01-12|           AA|    19805|     AA| N4YBAA|
 |2016|      1|    1|        13|        3|2016-01-13|           AA|    19805|     AA| N569AA|
-|2016|      1|    1|        14|        4|2016-01-14|           AA|    19805|     AA| N466AA|
+|2016|      1|      1|        14|        4|2016-01-14|           AA|    19805|     AA| N466AA|
 |2016|      1|    1|        15|        5|2016-01-15|           AA|    19805|     AA| N501AA|
 +----+-------+-----+----------+---------+----------+-------------+---------+-------+-------+
 only showing top 10 rows
 ```
-
-As you may see this is a pretty wide and table big table with details of flights in US.  
+As you can see, this is a fairly wide and large table containing detailed information about US flights in 2016.
 
 ### Anomaly detection
 After we have initial data in place now we can create anomaly detection monitoring.
-
-**NOTE**: To make it work enable "Data quality monitoring with anomaly detection (workspace level)" in
-"Previews" workspaces configuration. 
+**NOTE**: To make it work enable "Data quality monitoring with anomaly detection (workspace level)" in "Previews" workspaces configuration.
 
 This can be done either manually on the UI or though the following tools:
 - Terraform via [databricks_data_quality_monitor Resource](https://registry.terraform.io/providers/databricks/databricks/latest/docs/resources/data_quality_monitor)
@@ -119,47 +103,46 @@ monitor = Monitor(
 )
 w.data_quality.create_monitor(monitor)
 ```
-After the creation, it takes some for an internal model to learn data patterns, after which initial results won't be 
-super informative because this is just a first run. You can find them by opening "Catalog", choosing your catalog,
-schema, "on_time_on_time_performance_2016_1" table and then "Quality" tab in the UI which should look something like this:
+After creation, it takes some time for the internal model to learn data patterns. As a result, the initial results are not very informative, since this is only the first run.
+You can view the results by opening **Catalog**, selecting your catalog and schema, choosing the `on_time_on_time_performance_2016_1` table, and then navigating to the **Quality** tab in the UI. It should look something like this:
 ![](1_table_anomaly_detection.png)
 
-First checks will appear after at least 24 hours once internal model will learn how many rows daily are written into a table.
-TODO: show after 24 hours. both UI and `select * from system.data_quality_monitoring.table_results`
+The first meaningful checks will appear after at least 24 hours, once the internal model has learned more about the monitored table.
+After this period, the results will be available both in the `system.data_quality_monitoring.table_results` system table and in the UI:
+![](1_table_anomaly_detection.png)
 
 ### Data Profiling
-As it was mentioned before, Data Profiling is more controlled mechanism for Data Quality verification for which we need
-to define quality thresholds. They are [three types of Data Profiling](https://docs.databricks.com/aws/en/data-quality-monitoring/data-profiling/monitor-output#profile-metrics-table-schema)
-for different use case: Timeseries (for data with corresponding timestamp), Snapshot (for managed tables, external tables views etc.) and Inference (for tables with machine learning model outputs).
-Since we are interested in measuring quality for a plain delta table, the Snapshot profile type will be our primary focus. 
+As mentioned earlier, Data Profiling is a more controlled mechanism for data quality verification, because you define the quality thresholds yourself.
 
-At the high level, monitoring and alerting with Data Profiling looks the following:
+Databricks supports [three profile types](https://docs.databricks.com/aws/en/data-quality-monitoring/data-profiling/monitor-output#profile-metrics-table-schema), depending on the use case:
+- **Time series**: for data with a corresponding timestamp (metrics tracked over time)
+- **Snapshot**: for managed tables, external tables, views, etc.
+- **Inference**: for tables that contain machine learning model outputs
 
-**Create a data profiling monitor**.
-It will calculate default and custom metrics per table on a given schedule.
-Among default metrics calculated per table are: `min`, `max`, `percent_null`. A complete list of metrics can be found [here](https://docs.databricks.com/aws/en/data-quality-monitoring/data-profiling/monitor-output#profile-metrics-table-schema)
+Since we want to measure quality for a plain Delta table, the **Snapshot** profile type will be our primary focus.
 
-This can be done with using one of the following tools:
-- [`databricks_data_quality_monitor` resource in Terraform](https://registry.terraform.io/providers/databricks/databricks/latest/docs/resources/data_quality_monitor)
-- [`quality_monitor` in Asset bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/resources#quality_monitor-unity-catalog)
-- [`data_quality` API in Databricks SDK](https://docs.databricks.com/aws/en/data-quality-monitoring/data-profiling/create-monitor-api)
+At a high level, monitoring and alerting with Data Profiling looks like this:
+#### 1) Create a data profiling monitor
+The monitor calculates default and custom metrics per table on a schedule. Default metrics include `min`, `max`, and `percent_null`. A complete list of metrics is available [here](https://docs.databricks.com/aws/en/data-quality-monitoring/data-profiling/monitor-output#profile-metrics-table-schema).
 
-After profiling monitor creation it will be automatically scheduled for a refresh. 
-Each refresh result will be written into two tables:
-- `{source_table}_profile_metrics` - table metrics calculated for the table snapshot at the moment of schedule.
-- `{source_table}_drift_metrics` - table metrics version-over-version.
+You can create a monitor using one of the following tools:
+- Terraform: [`databricks_data_quality_monitor` resource](https://registry.terraform.io/providers/databricks/databricks/latest/docs/resources/data_quality_monitor)
+- Asset Bundles: [`quality_monitor`](https://docs.databricks.com/aws/en/dev-tools/bundles/resources#quality_monitor-unity-catalog)
+- Databricks SDK: [`data_quality` API](https://docs.databricks.com/aws/en/data-quality-monitoring/data-profiling/create-monitor-api)
 
-**Create an alert for one of the tables**.
-Similarly to the case of anomalies detection, to be notified about any issues with the data corresponding alerts needs 
-to be created. Although this time, alert condition will be based on profile, and we need to decide metrics thresholds.
+After the profiling monitor is created, it will be automatically scheduled for refresh. Each refresh writes results into two tables:
+- `{source_table}_profile_metrics`: metrics calculated for the table snapshot at the time of the refresh
+- `{source_table}_drift_metrics`: version-over-version drift metrics
 
-This can be done with using one of the following tools:
-- [`databricks_alert_v2` resource in Terraform](https://registry.terraform.io/providers/databricks/databricks/latest/docs/resources/alert_v2)
-- [`alert` in Asset bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/resources#alert)
-- [`alerts_v2` API in Databricks SDK](https://databricks-sdk-py.readthedocs.io/en/latest/clients/workspace.html#databricks.sdk.WorkspaceClient.alerts_v2)
+#### 2) Create an alert on the profiling results
+As with anomaly detection, you need alerts to be notified about data issues. The difference is that alert conditions are based on profiling metrics, so you must decide the metric thresholds.
 
-So let's proceed to implementation. We will create a snapshot profile with additional custom metric named `outdated` 
-which counts a number of dates older than 2016 year and apply it for the `FlightDate` column.
+You can create alerts using one of the following tools:
+- Terraform: [`databricks_alert_v2` resource](https://registry.terraform.io/providers/databricks/databricks/latest/docs/resources/alert_v2)
+- Asset Bundles: [`alert`](https://docs.databricks.com/aws/en/dev-tools/bundles/resources#alert)
+- Databricks SDK: [`alerts_v2` API](https://databricks-sdk-py.readthedocs.io/en/latest/clients/workspace.html#databricks.sdk.WorkspaceClient.alerts_v2)
+
+Now let’s proceed to the implementation. We will create a Snapshot profile with an additional custom metric called `outdated`, which counts the number of dates earlier than 2016, and apply it to the `FlightDate` column.
 ```python
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.dataquality import (
@@ -222,8 +205,7 @@ monitor = Monitor(
 w.data_quality.create_monitor(monitor)
 ```
 
-Once monitor have been created, it will schedule a first refresh as soon as possible. It is also possible to manually
-trigger refresh with the SDK:
+Once the monitor has been created, it schedules the first refresh as soon as possible. You can also trigger a refresh manually via the SDK:
 ```python
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.dataquality import Refresh
@@ -328,8 +310,8 @@ alert_config = AlertV2(
 w.alerts_v2.create_alert(alert=alert_config)
 ```
 
-For the sake of demonstration lets pollute a monitored table. For this purpose we will add to the table 10 rows
-from original dataset, but replaced `FlightDate` column with the 1st of January 2015:
+For the sake of demonstration, let’s intentionally pollute the monitored table.
+To do this, we will insert 10 rows from the original dataset, but with the `FlightDate` column replaced by January 1, 2015:
 ```python
 from pyspark.sql import functions as F
 
@@ -347,24 +329,26 @@ full_table_name = f"catalog.airline_raw.on_time_on_time_performance_2016_1"
     .saveAsTable(full_table_name)
 )
 ```
-After having this in place we need to trigger monitor refresh. This can be done though the tooling or in UI by going to:
-"Unity Catalog -> {table} -> Quality tab -> Data Profiling -> View Refresh History -> Refresh Metrics"
+With this change in place, we need to trigger a monitor refresh. You can do this via automation tooling, or from the UI:
+`Unity Catalog -> {table} -> Quality tab -> Data Profiling -> View Refresh History -> Refresh Metrics`
 
 ![2_table_profiling_trigger_refresh.png](2_table_profiling_trigger_refresh.png)
 
-After metrics are refreshed, the alert needs to be triggered to raise an error.
-After the alert execution notification will be sent, which in the current case is an email:
+Once the metrics are refreshed, the alert must run to evaluate the new results and raise an issue if the threshold is breached.
+After the alert runs, a notification is sent (in this example, an email):
 ![](3_alert_notification.png)
 
 ### Alerts
-Although Data Profiling is a powerful tool for data quality monitoring, it might be not enough to cover more complicated
-cases such as foreign keys integrity between two or more tables or duplicates percentage by several columns.
-These cases can be covered with plain SQL queries and Alerts. 
+Although Data Profiling is a powerful tool for data quality monitoring, it may not be sufficient to cover more complex cases, such as:
+- foreign key integrity checks across two or more tables
+- duplicate rate thresholds across multiple columns
 
-### Note
-In conclusion, couple points to bear in mind if you are considering these platforms tools for implementation:
-- Leverages SQL warehouses that might be more generally slightly more expensive in comparison to all-purpose compute;
-- Tooling is not always aligned: Anomaly detection can not be created though asset bundles, but everything else can be.
+These scenarios can be addressed using plain SQL queries combined with Databricks Alerts.
+
+### Notes
+In conclusion, here are a couple of points to keep in mind if you are considering these platform tools for implementation:
+- They rely on SQL warehouses, which are generally more expensive than all-purpose compute.
+- Tooling is not always fully aligned: anomaly detection monitors cannot currently be created via Asset Bundles, while the other components can.
 
 ### References
 Bellow is the list of other sources used to write this post:
