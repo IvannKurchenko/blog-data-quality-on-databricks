@@ -72,7 +72,7 @@ Flights table: columns count: 83; rows count: 445827
 |2016|      1|    1|        11|        1|2016-01-11|           AA|    19805|     AA| N468AA|
 |2016|      1|    1|        12|        2|2016-01-12|           AA|    19805|     AA| N4YBAA|
 |2016|      1|    1|        13|        3|2016-01-13|           AA|    19805|     AA| N569AA|
-|2016|      1|      1|        14|        4|2016-01-14|           AA|    19805|     AA| N466AA|
+|2016|      1|    1|        14|        4|2016-01-14|           AA|    19805|     AA| N466AA|
 |2016|      1|    1|        15|        5|2016-01-15|           AA|    19805|     AA| N501AA|
 +----+-------+-----+----------+---------+----------+-------------+---------+-------+-------+
 only showing top 10 rows
@@ -105,10 +105,6 @@ w.data_quality.create_monitor(monitor)
 ```
 After creation, it takes some time for the internal model to learn data patterns. As a result, the initial results are not very informative, since this is only the first run.
 You can view the results by opening **Catalog**, selecting your catalog and schema, choosing the `on_time_on_time_performance_2016_1` table, and then navigating to the **Quality** tab in the UI. It should look something like this:
-![](1_table_anomaly_detection.png)
-
-The first meaningful checks will appear after at least 24 hours, once the internal model has learned more about the monitored table.
-After this period, the results will be available both in the `system.data_quality_monitoring.table_results` system table and in the UI:
 ![](1_table_anomaly_detection.png)
 
 ### Data Profiling
